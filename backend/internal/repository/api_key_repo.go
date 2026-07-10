@@ -949,6 +949,15 @@ func groupEntityToService(g *dbent.Group) *service.Group {
 		DailyLimitUSD:                   g.DailyLimitUsd,
 		WeeklyLimitUSD:                  g.WeeklyLimitUsd,
 		MonthlyLimitUSD:                 g.MonthlyLimitUsd,
+		QuotaDailyResetMode:             derefString(g.QuotaDailyResetMode),
+		QuotaDailyResetHour:             derefInt(g.QuotaDailyResetHour),
+		QuotaWeeklyResetMode:            derefString(g.QuotaWeeklyResetMode),
+		QuotaWeeklyResetDay:             derefIntDefault(g.QuotaWeeklyResetDay, 1),
+		QuotaWeeklyResetHour:            derefInt(g.QuotaWeeklyResetHour),
+		QuotaMonthlyResetMode:           derefString(g.QuotaMonthlyResetMode),
+		QuotaMonthlyResetDay:            derefIntDefault(g.QuotaMonthlyResetDay, 1),
+		QuotaMonthlyResetHour:           derefInt(g.QuotaMonthlyResetHour),
+		QuotaResetTimezone:              derefString(g.QuotaResetTimezone),
 		AllowImageGeneration:            g.AllowImageGeneration,
 		AllowBatchImageGeneration:       g.AllowBatchImageGeneration,
 		ImageRateIndependent:            g.ImageRateIndependent,
@@ -997,4 +1006,18 @@ func derefString(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func derefInt(v *int) int {
+	if v == nil {
+		return 0
+	}
+	return *v
+}
+
+func derefIntDefault(v *int, fallback int) int {
+	if v == nil {
+		return fallback
+	}
+	return *v
 }
