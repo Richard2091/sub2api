@@ -5,6 +5,7 @@
 
 import { apiClient } from '../client'
 import type {
+  AdminOrderStats,
   DashboardStats,
   PaymentOrder,
   PaymentChannel,
@@ -81,6 +82,19 @@ export const adminPaymentAPI = {
     return apiClient.get<DashboardStats>('/admin/payment/dashboard', {
       params: days ? { days } : undefined
     })
+  },
+
+  /** Get order profitability statistics with the same filters as order management */
+  getOrderStats(params?: {
+    status?: string
+    payment_type?: string
+    user_id?: number
+    keyword?: string
+    start_date?: string
+    end_date?: string
+    order_type?: string
+  }) {
+    return apiClient.get<AdminOrderStats>('/admin/payment/order-stats', { params })
   },
 
   // ==================== Orders ====================

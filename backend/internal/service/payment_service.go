@@ -119,6 +119,9 @@ type OrderListParams struct {
 	OrderType   string
 	PaymentType string
 	Keyword     string
+	UserID      int64
+	StartTime   time.Time
+	EndTime     time.Time
 }
 
 type RefundPlan struct {
@@ -159,6 +162,43 @@ type DashboardStats struct {
 // CurrencyAmounts holds payment amounts keyed by their ISO 4217 currency.
 // Amounts in different currencies must never be added together.
 type CurrencyAmounts map[string]float64
+
+type AdminOrderStats struct {
+	TotalOrders       int                          `json:"total_orders"`
+	PaidOrders        int                          `json:"paid_orders"`
+	PendingOrders     int                          `json:"pending_orders"`
+	GrossAmount       float64                      `json:"gross_amount"`
+	GrossPayAmount    float64                      `json:"gross_pay_amount"`
+	RefundAmount      float64                      `json:"refund_amount"`
+	FeeAmount         float64                      `json:"fee_amount"`
+	NetPayAmount      float64                      `json:"net_pay_amount"`
+	AvgPayAmount      float64                      `json:"avg_pay_amount"`
+	TopUsers          []AdminOrderUserStat         `json:"top_users"`
+	SubscriptionPlans []AdminOrderSubscriptionStat `json:"subscription_plans"`
+}
+
+type AdminOrderUserStat struct {
+	UserID         int64   `json:"user_id"`
+	Email          string  `json:"email"`
+	Name           string  `json:"name"`
+	OrderCount     int     `json:"order_count"`
+	GrossAmount    float64 `json:"gross_amount"`
+	GrossPayAmount float64 `json:"gross_pay_amount"`
+	RefundAmount   float64 `json:"refund_amount"`
+	FeeAmount      float64 `json:"fee_amount"`
+	NetPayAmount   float64 `json:"net_pay_amount"`
+}
+
+type AdminOrderSubscriptionStat struct {
+	PlanID         int64   `json:"plan_id"`
+	PlanName       string  `json:"plan_name"`
+	OrderCount     int     `json:"order_count"`
+	GrossAmount    float64 `json:"gross_amount"`
+	GrossPayAmount float64 `json:"gross_pay_amount"`
+	RefundAmount   float64 `json:"refund_amount"`
+	FeeAmount      float64 `json:"fee_amount"`
+	NetPayAmount   float64 `json:"net_pay_amount"`
+}
 
 type DailyStats struct {
 	Date   string          `json:"date"`

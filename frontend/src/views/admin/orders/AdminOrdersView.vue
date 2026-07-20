@@ -1,19 +1,99 @@
 <template>
   <AppLayout>
     <div class="space-y-4">
+      <!-- Profit Summary -->
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div v-for="card in statsCards" :key="card.key" class="card p-4">
+          <div class="flex items-center gap-3">
+            <div :class="['rounded-lg p-2', card.iconBg, card.iconText]">
+              <Icon :name="card.icon" size="md" />
+            </div>
+            <div class="min-w-0">
+              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ card.label }}</p>
+              <p :class="['text-xl font-bold tabular-nums', card.valueClass || 'text-gray-900 dark:text-white']">{{ card.value }}</p>
+              <p class="truncate text-xs text-gray-500 dark:text-gray-400">{{ card.hint }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Filters -->
       <div class="card p-4">
         <div class="flex flex-wrap items-center gap-3">
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.dashboard.timeRange') }}:</span>
+            <DateRangePicker
+              v-model:start-date="startDate"
+              v-model:end-date="endDate"
+              @change="onDateRangeChange"
+            />
+          </div>
           <div class="flex-1 sm:max-w-64">
             <input v-model="orderSearch" type="text" :placeholder="t('payment.admin.searchOrders')" class="input" @input="debounceLoadOrders" />
           </div>
-          <Select v-model="orderFilters.status" :options="statusFilterOptions" class="w-36" @change="loadOrders" />
-          <Select v-model="orderFilters.payment_type" :options="paymentTypeFilterOptions" class="w-40" @change="loadOrders" />
-          <Select v-model="orderFilters.order_type" :options="orderTypeFilterOptions" class="w-36" @change="loadOrders" />
+          <Select v-model="orderFilters.status" :options="statusFilterOptions" class="w-36" @change="applyFilters" />
+          <Select v-model="orderFilters.payment_type" :options="paymentTypeFilterOptions" class="w-40" @change="applyFilters" />
+          <Select v-model="orderFilters.order_type" :options="orderTypeFilterOptions" class="w-36" @change="applyFilters" />
           <div class="flex flex-1 flex-wrap items-center justify-end gap-2">
-            <button @click="loadOrders" :disabled="ordersLoading" class="btn btn-secondary" :title="t('common.refresh')">
-              <Icon name="refresh" size="md" :class="ordersLoading ? 'animate-spin' : ''" />
+            <button @click="refreshData" :disabled="ordersLoading || statsLoading" class="btn btn-secondary" :title="t('common.refresh')">
+              <Icon name="refresh" size="md" :class="ordersLoading || statsLoading ? 'animate-spin' : ''" />
             </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Analytics Breakdown -->
+      <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div class="card p-4">
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('payment.admin.userTopUpDistribution') }}</h3>
+            <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.byPayAmount') }}</span>
+          </div>
+          <div v-if="!orderStats?.top_users?.length" class="flex h-32 items-center justify-center text-sm text-gray-500 dark:text-gray-400">{{ t('payment.admin.noData') }}</div>
+          <div v-else class="space-y-3">
+            <div v-for="user in topUserRows" :key="user.user_id" class="space-y-1.5">
+              <div class="flex items-center justify-between gap-3 text-sm">
+                <div class="min-w-0">
+                  <p class="truncate font-medium text-gray-800 dark:text-gray-100">{{ user.email || user.name || `#${user.user_id}` }}</p>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">{{ user.order_count }} {{ t('payment.admin.orders') }}</p>
+                </div>
+                <div class="text-right tabular-nums">
+                  <p class="font-semibold text-gray-900 dark:text-white">{{ formatMoney(user.gross_pay_amount) }}</p>
+                  <p :class="['text-xs', user.net_pay_amount >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400']">{{ formatMoney(user.net_pay_amount) }}</p>
+                </div>
+              </div>
+              <div class="h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-dark-700">
+                <div class="h-full rounded-full bg-blue-500" :style="{ width: `${user.percent}%` }"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card p-4">
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('payment.admin.subscriptionPurchaseDistribution') }}</h3>
+            <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.byRevenue') }}</span>
+          </div>
+          <div v-if="!orderStats?.subscription_plans?.length" class="flex h-32 items-center justify-center text-sm text-gray-500 dark:text-gray-400">{{ t('payment.admin.noData') }}</div>
+          <div v-else class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead>
+                <tr class="border-b border-gray-100 text-xs text-gray-500 dark:border-dark-700 dark:text-gray-400">
+                  <th class="py-2 text-left font-medium">{{ t('payment.admin.planName') }}</th>
+                  <th class="py-2 text-right font-medium">{{ t('payment.admin.orders') }}</th>
+                  <th class="py-2 text-right font-medium">{{ t('payment.admin.payAmount') }}</th>
+                  <th class="py-2 text-right font-medium">{{ t('payment.admin.netRevenue') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="plan in subscriptionRows" :key="plan.plan_id" class="border-b border-gray-50 last:border-0 dark:border-dark-700/60">
+                  <td class="max-w-[12rem] truncate py-2 font-medium text-gray-800 dark:text-gray-100">{{ plan.plan_name }}</td>
+                  <td class="py-2 text-right tabular-nums text-gray-600 dark:text-gray-300">{{ plan.order_count }}</td>
+                  <td class="py-2 text-right tabular-nums text-gray-900 dark:text-white">{{ formatMoney(plan.gross_pay_amount) }}</td>
+                  <td :class="['py-2 text-right tabular-nums font-medium', plan.net_pay_amount >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400']">{{ formatMoney(plan.net_pay_amount) }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -122,11 +202,12 @@ import { useAppStore } from '@/stores/app'
 import { adminPaymentAPI } from '@/api/admin/payment'
 import { extractI18nErrorMessage } from '@/utils/apiError'
 import { formatOrderDateTime } from '@/components/payment/orderUtils'
-import type { PaymentOrder } from '@/types/payment'
+import type { AdminOrderStats, PaymentOrder } from '@/types/payment'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
+import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import Icon from '@/components/icons/Icon.vue'
 import AdminRefundDialog from '@/components/admin/payment/AdminRefundDialog.vue'
 import OrderStatusBadge from '@/components/payment/OrderStatusBadge.vue'
@@ -144,8 +225,24 @@ interface AuditLog {
 const { t } = useI18n()
 const appStore = useAppStore()
 
+const formatLD = (d: Date) => {
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+const getLast24HoursRangeDates = (): { start: string; end: string } => {
+  const end = new Date()
+  const start = new Date(end.getTime() - 24 * 60 * 60 * 1000)
+  return { start: formatLD(start), end: formatLD(end) }
+}
+const defaultRange = getLast24HoursRangeDates()
+const startDate = ref(defaultRange.start)
+const endDate = ref(defaultRange.end)
 const ordersLoading = ref(false)
+const statsLoading = ref(false)
 const orders = ref<PaymentOrder[]>([])
+const orderStats = ref<AdminOrderStats | null>(null)
 const orderSearch = ref('')
 const orderFilters = reactive({ status: '', payment_type: '', order_type: '' })
 const orderPagination = reactive({ page: 1, page_size: 20, total: 0 })
@@ -157,6 +254,82 @@ const refundQueryingIds = ref(new Set<number>())
 const orderAuditLogs = ref<AuditLog[]>([])
 const creditedAmountSymbol = currencySymbol('USD')
 
+const moneyFormatter = new Intl.NumberFormat(undefined, {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
+function formatMoney(value: number | null | undefined): string {
+  return moneyFormatter.format(Number(value || 0))
+}
+
+function buildOrderQueryParams() {
+  return {
+    keyword: orderSearch.value || undefined,
+    status: orderFilters.status || undefined,
+    payment_type: orderFilters.payment_type || undefined,
+    order_type: orderFilters.order_type || undefined,
+    start_date: startDate.value || undefined,
+    end_date: endDate.value || undefined,
+  }
+}
+
+const statsCards = computed(() => {
+  const stats = orderStats.value
+  return [
+    {
+      key: 'net',
+      icon: 'dollar' as const,
+      iconBg: 'bg-green-100 dark:bg-green-900/30',
+      iconText: 'text-green-600 dark:text-green-400',
+      label: t('payment.admin.netRevenue'),
+      value: formatMoney(stats?.net_pay_amount),
+      hint: `${t('payment.admin.payAmount')} ${formatMoney(stats?.gross_pay_amount)} / ${t('payment.admin.refundAmount')} ${formatMoney(stats?.refund_amount)}`,
+      valueClass: (stats?.net_pay_amount || 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400',
+    },
+    {
+      key: 'amount',
+      icon: 'creditCard' as const,
+      iconBg: 'bg-blue-100 dark:bg-blue-900/30',
+      iconText: 'text-blue-600 dark:text-blue-400',
+      label: t('payment.admin.grossRevenue'),
+      value: formatMoney(stats?.gross_amount),
+      hint: `${t('payment.admin.payAmount')} ${formatMoney(stats?.gross_pay_amount)}`,
+    },
+    {
+      key: 'fee',
+      icon: 'calculator' as const,
+      iconBg: 'bg-amber-100 dark:bg-amber-900/30',
+      iconText: 'text-amber-600 dark:text-amber-400',
+      label: t('payment.admin.estimatedFee'),
+      value: formatMoney(stats?.fee_amount),
+      hint: `${t('payment.admin.avgAmount')} ${formatMoney(stats?.avg_pay_amount)}`,
+    },
+    {
+      key: 'orders',
+      icon: 'document' as const,
+      iconBg: 'bg-purple-100 dark:bg-purple-900/30',
+      iconText: 'text-purple-600 dark:text-purple-400',
+      label: t('payment.admin.orderCount'),
+      value: String(stats?.total_orders || 0),
+      hint: `${t('payment.admin.paidOrders')} ${stats?.paid_orders || 0} / ${t('payment.status.pending')} ${stats?.pending_orders || 0}`,
+    },
+  ]
+})
+
+const topUserRows = computed(() => {
+  const rows = orderStats.value?.top_users || []
+  const max = Math.max(...rows.map((item) => item.gross_pay_amount), 0)
+  return rows.slice(0, 8).map((item) => ({
+    ...item,
+    percent: max > 0 ? Math.max(4, Math.round((item.gross_pay_amount / max) * 100)) : 0,
+  }))
+})
+
+const subscriptionRows = computed(() => (orderStats.value?.subscription_plans || []).slice(0, 8))
+
 function paymentAmountSymbol(order: PaymentOrder | null | undefined): string {
   return currencySymbol(order?.currency)
 }
@@ -164,7 +337,7 @@ function paymentAmountSymbol(order: PaymentOrder | null | undefined): string {
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 function debounceLoadOrders() {
   if (debounceTimer) clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(() => loadOrders(), 300)
+  debounceTimer = setTimeout(() => { orderPagination.page = 1; refreshData() }, 300)
 }
 
 async function loadOrders() {
@@ -172,14 +345,40 @@ async function loadOrders() {
   try {
     const res = await adminPaymentAPI.getOrders({
       page: orderPagination.page, page_size: orderPagination.page_size,
-      keyword: orderSearch.value || undefined, status: orderFilters.status || undefined,
-      payment_type: orderFilters.payment_type || undefined, order_type: orderFilters.order_type || undefined,
+      ...buildOrderQueryParams(),
     })
     orders.value = res.data.items || []
     orderPagination.total = res.data.total || 0
   } catch (err: unknown) {
     appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
   } finally { ordersLoading.value = false }
+}
+
+async function loadOrderStats() {
+  statsLoading.value = true
+  try {
+    const res = await adminPaymentAPI.getOrderStats(buildOrderQueryParams())
+    orderStats.value = res.data
+  } catch (err: unknown) {
+    appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
+  } finally { statsLoading.value = false }
+}
+
+function refreshData() {
+  loadOrders()
+  loadOrderStats()
+}
+
+function applyFilters() {
+  orderPagination.page = 1
+  refreshData()
+}
+
+function onDateRangeChange(range: { startDate: string; endDate: string; preset: string | null }) {
+  startDate.value = range.startDate
+  endDate.value = range.endDate
+  orderPagination.page = 1
+  refreshData()
 }
 
 function handleOrderPageChange(page: number) { orderPagination.page = page; loadOrders() }
@@ -286,5 +485,5 @@ async function handleQueryRefund(order: PaymentOrder) {
 
 function formatDateTime(dateStr: string): string { return formatOrderDateTime(dateStr) }
 
-onMounted(() => loadOrders())
+onMounted(() => refreshData())
 </script>
