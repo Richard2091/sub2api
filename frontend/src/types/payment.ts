@@ -225,7 +225,42 @@ export interface DashboardStats {
   today_count: number
   total_count: number
   avg_amount: number
+  profit_stats?: AdminOrderStats
   daily_series: { date: string; amount: number; count: number }[]
   payment_methods: { type: string; amount: number; count: number }[]
   top_users: { user_id: number; email: string; amount: number }[]
+}
+
+export interface AdminOrderBreakdownItem {
+  order_count: number
+  gross_amount: number
+  gross_pay_amount: number
+  refund_amount: number
+  fee_amount: number
+  net_pay_amount: number
+}
+
+export interface AdminOrderUserStat extends AdminOrderBreakdownItem {
+  user_id: number
+  email: string
+  name: string
+}
+
+export interface AdminOrderSubscriptionStat extends AdminOrderBreakdownItem {
+  plan_id: number
+  plan_name: string
+}
+
+export interface AdminOrderStats {
+  total_orders: number
+  paid_orders: number
+  pending_orders: number
+  gross_amount: number
+  gross_pay_amount: number
+  refund_amount: number
+  fee_amount: number
+  net_pay_amount: number
+  avg_pay_amount: number
+  top_users: AdminOrderUserStat[]
+  subscription_plans: AdminOrderSubscriptionStat[]
 }

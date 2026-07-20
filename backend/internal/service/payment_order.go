@@ -868,6 +868,12 @@ func (s *PaymentService) AdminListOrders(ctx context.Context, userID int64, p Or
 	if p.PaymentType != "" {
 		q = q.Where(paymentorder.PaymentTypeEQ(p.PaymentType))
 	}
+	if !p.StartTime.IsZero() {
+		q = q.Where(paymentorder.CreatedAtGTE(p.StartTime))
+	}
+	if !p.EndTime.IsZero() {
+		q = q.Where(paymentorder.CreatedAtLT(p.EndTime))
+	}
 	if p.Keyword != "" {
 		q = q.Where(paymentorder.Or(
 			paymentorder.OutTradeNoContainsFold(p.Keyword),

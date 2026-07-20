@@ -30,6 +30,20 @@ func NewPaymentHandler(paymentService *service.PaymentService, configService *se
 // GetDashboard returns payment dashboard statistics.
 // GET /api/v1/admin/payment/dashboard
 func (h *PaymentHandler) GetDashboard(c *gin.Context) {
+	startTime, endTime, ok := parseAdminOrderDateRange(c)
+	if !ok {
+		return
+	}
+	if !startTime.IsZero() || !endTime.IsZero() {
+		stats, err := h.paymentService.GetDashboardStatsForRange(c.Request.Context(), startTime, endTime)
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		response.Success(c, stats)
+		return
+	}
+
 	days := 30
 	if d := c.Query("days"); d != "" {
 		if v, err := strconv.Atoi(d); err == nil && v > 0 {
@@ -49,26 +63,64 @@ func (h *PaymentHandler) GetDashboard(c *gin.Context) {
 // ListOrders returns a paginated list of all payment orders.
 // GET /api/v1/admin/payment/orders
 func (h *PaymentHandler) ListOrders(c *gin.Context) {
+	params, ok := parseAdminOrderListParams(c)
+	if !ok {
+		return
+	}
 	page, pageSize := response.ParsePagination(c)
+	params.Page = page
+	params.PageSize = pageSize
+	orders, total, err := h.paymentService.AdminListOrders(c.Request.Context(), params.UserID, params)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Paginated(c, sanitizeAdminPaymentOrdersForResponse(orders), int64(total), page, pageSize)
+}
+
+func parseAdminOrderListParams(c *gin.Context) (service.OrderListParams, bool) {
+	startTime, endTime, ok := parseAdminOrderDateRange(c)
+	if !ok {
+		return service.OrderListParams{}, false
+	}
 	var userID int64
 	if uid := c.Query("user_id"); uid != "" {
 		if v, err := strconv.ParseInt(uid, 10, 64); err == nil {
 			userID = v
 		}
 	}
-	orders, total, err := h.paymentService.AdminListOrders(c.Request.Context(), userID, service.OrderListParams{
-		Page:        page,
-		PageSize:    pageSize,
+	return service.OrderListParams{
 		Status:      c.Query("status"),
 		OrderType:   c.Query("order_type"),
 		PaymentType: c.Query("payment_type"),
 		Keyword:     c.Query("keyword"),
-	})
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
+		UserID:      userID,
+		StartTime:   startTime,
+		EndTime:     endTime,
+	}, true
+}
+
+func parseAdminOrderDateRange(c *gin.Context) (time.Time, time.Time, bool) {
+	const layout = "2006-01-02"
+	var startTime time.Time
+	var endTime time.Time
+	if startDate := c.Query("start_date"); startDate != "" {
+		parsed, err := time.ParseInLocation(layout, startDate, time.Local)
+		if err != nil {
+			response.BadRequest(c, "Invalid start_date")
+			return time.Time{}, time.Time{}, false
+		}
+		startTime = parsed
 	}
-	response.Paginated(c, sanitizeAdminPaymentOrdersForResponse(orders), int64(total), page, pageSize)
+	if endDate := c.Query("end_date"); endDate != "" {
+		parsed, err := time.ParseInLocation(layout, endDate, time.Local)
+		if err != nil {
+			response.BadRequest(c, "Invalid end_date")
+			return time.Time{}, time.Time{}, false
+		}
+		endTime = parsed.AddDate(0, 0, 1)
+	}
+	return startTime, endTime, true
 }
 
 // GetOrderDetail returns detailed information about a single order.
